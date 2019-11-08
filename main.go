@@ -4,22 +4,24 @@ import (
    "fmt"
    "flag"
    "time"
+   "net/http"
+   "io"
    "github.com/hako/durafmt"
    "golang.org/x/sys/unix"
 )
 
 func main() {
 
-   var url string
-
-   flag.StringVar(&url, "url", "", "the url where to send the report")
-
+   var port int
+   flag.IntVar(&port, "port", 9090, "the port to listen on")
    flag.Parse()
 
-   if len(url) > 0 {
-      fmt.Println("url:", url)
-   }
+   http.HandleFunc("/", getUptime)
+   fmt.Printf("Listening on port: %d...\n", port)
+   http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+}
 
+func getUptime(writer http.ResponseWriter, request *http.Request) {
    var sysinfo unix.Sysinfo_t
 
    var err error = unix.Sysinfo(&sysinfo)
@@ -31,5 +33,5 @@ func main() {
    // sysinfo.Uptime is seconds since boot. Convert to nanoseconds
    var uptime time.Duration = time.Duration(sysinfo.Uptime * 1e9)
 
-   fmt.Println(durafmt.Parse(uptime))
+   io.WriteString(writer, durafmt.Parse(uptime).String())
 }
