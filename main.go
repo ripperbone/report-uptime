@@ -3,17 +3,16 @@ package main
 import (
    "fmt"
    "flag"
-   "time"
    "net/http"
    "os"
    "encoding/json"
-   "github.com/hako/durafmt"
-   "golang.org/x/sys/unix"
+   "github.com/shirou/gopsutil/host"
 )
 
 type Response struct {
    Hostname string `json:"hostname"`
-   Uptime string `json:"uptime"`
+   Uptime uint64 `json:"uptime"`
+   UptimeString string `json:"uptime_string"`
 }
 
 func main() {
@@ -28,24 +27,33 @@ func main() {
 }
 
 func getUptime(writer http.ResponseWriter, request *http.Request) {
-   var sysinfo unix.Sysinfo_t
 
-   var err error = unix.Sysinfo(&sysinfo)
+   hostname, err := os.Hostname()
 
    if err != nil {
-      fmt.Errorf("Error reading sysinfo: %v", err)
+      fmt.Errorf("Error getting hostname: %v", err)
    }
 
-   // sysinfo.Uptime is seconds since boot. Convert to nanoseconds
-   var uptime time.Duration = time.Duration(sysinfo.Uptime * 1e9)
-   hostname, _ := os.Hostname()
+   uptime, err := host.Uptime()
 
-   response := Response{ Hostname: hostname, Uptime: durafmt.Parse(uptime).String() }
+   if err != nil {
+      fmt.Errorf("Error getting uptime: %v", err)
+   }
+
+   response := Response{ Hostname: hostname, Uptime: uptime, UptimeString: formatUptime(uptime) }
    data, err := json.Marshal(response)
 
    if err != nil {
       fmt.Errorf("Error forming response: %v", err)
    }
+
    writer.Header().Set("Content-Type", "application/json")
    writer.Write(data)
+}
+
+func formatUptime(uptime uint64) string {
+   days := uptime / 86400
+   hours := (uptime % 86400) / 3600
+   minutes := (uptime % 3600) / 60
+   return fmt.Sprintf("%d days %d hours %d minutes", days, hours, minutes)
 }
